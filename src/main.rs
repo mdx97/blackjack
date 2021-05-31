@@ -1,6 +1,10 @@
 use rand::prelude::*;
 use std::io::{self, Write};
 use std::process;
+use std::cmp::Ordering;
+
+/// The hand value at which the player is awarded a Blackjack.
+const BLACKJACK: u32 = 21;
 
 /// All possible card values.
 const CARD_VALUES: [&str; 13] = ["Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"];
@@ -51,7 +55,7 @@ fn print_hand(hand: &Hand) {
     for card in hand[1..].iter() {
         println!("(up) {}", get_card_name(card));
     }
-    println!("\nYour hand has a value of {}!", get_hand_value(hand));
+    println!("\nHand has a value of {}!", get_hand_value(hand));
 }
 
 /// Create and return a new shuffled Deck.
@@ -171,7 +175,8 @@ fn main() {
                             "exit: End the game.",
                             "hand: View the cards you currently have in your hand.",
                             "hit: Have the dealer give you another card. Don't go over 21, though!",
-                            "leave: Leave the current hand."
+                            "leave: Leave the current hand.",
+                            "stay: Stop taking new cards and lock in your current hand value.",
                         ]);
                     },
                     "hit" => {
@@ -181,10 +186,10 @@ fn main() {
                         print_hand(&hand);
 
                         let hand_value = get_hand_value(&hand);
-                        if hand_value > 21 {
+                        if hand_value > BLACKJACK {
                             println!("\nYOU BUSTED!!!");
                             phase = GamePhase::OutOfGame;
-                        } else if hand_value == 21 {
+                        } else if hand_value == BLACKJACK {
                             println!("\nBLACKJACK!");
                             chips += bet;
                             phase = GamePhase::OutOfGame;
@@ -193,6 +198,44 @@ fn main() {
                     "leave" => {
                         phase = GamePhase::OutOfGame;
                         println!("You have quit your hand!");
+                    },
+                    "stay" => {
+                        let mut dealer_hand = Vec::new();
+                        dealer_hand.push(deck.pop().unwrap());
+                        dealer_hand.push(deck.pop().unwrap());
+
+                        // TODO: Will dealer try to beat the player's hand?
+                        while get_hand_value(&dealer_hand) < DEALER_LIMIT {
+                            dealer_hand.push(deck.pop().unwrap());
+                        }
+
+                        // TODO: Make helper function for surrounding with dashes.
+                        print_lines(vec!["---------", "Your Hand", "---------"]);
+                        print_hand(&hand);
+                        print_lines(vec!["-------------", "Dealer's Hand", "-------------"]);
+                        print_hand(&dealer_hand);
+                        println!();
+
+                        if get_hand_value(&dealer_hand) > BLACKJACK {
+                            println!("DEALER BUSTED. YOU WIN!!!");
+                            chips += bet * 2;
+                        } else {
+                            match get_hand_value(&dealer_hand).cmp(&get_hand_value(&hand)) {
+                                Ordering::Less => {
+                                    println!("YOU WIN!!!");
+                                    chips += bet * 2;
+                                },
+                                Ordering::Equal => {
+                                    println!("DRAW!!!");
+                                    chips += bet;
+                                },
+                                Ordering::Greater => {
+                                    println!("YOU LOSE!!!");
+                                },
+                            }
+                        }
+
+                        phase = GamePhase::OutOfGame;
                     },
                     _ => println!("Invalid command!"),
                 }
