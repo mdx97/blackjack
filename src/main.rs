@@ -2,15 +2,24 @@ use rand::prelude::*;
 use std::io::{self, Write};
 use std::process;
 
+/// All possible card values.
 const CARD_VALUES: [&str; 13] = ["Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"];
+
+/// All possible card suits.
 const CARD_SUITS: [&str; 4] = ["Hearts", "Diamonds", "Clubs", "Spades"];
+
+/// The hand value at which the dealer will stop trying to add to their own hand.
 const DEALER_LIMIT: u32 = 17;
+
+/// Used to print the help menu for each game phase.
 const HELP_MENU_HEADER: [&str; 4] = [
     "-----------------------",
     "Command Line Blackjack",
     "-----------------------",
     "Available commands:",
 ];
+
+/// The command line prompt used to indicate the user that the game is waiting for input.
 const PROMPT: &str = ">>>";
 
 type Card = (String, String);
@@ -23,17 +32,20 @@ enum GamePhase {
     InGame,
 }
 
+/// Print the given lines to stdout.
 fn print_lines(lines: Vec<&str>) {
     for line in lines.iter() {
         println!("{}", line);
     }
 }
 
+/// Print a help menu with the given available commands.
 fn print_help_menu(commands: Vec<&str>) {
     print_lines(HELP_MENU_HEADER.to_vec());
     print_lines(commands);
 }
 
+/// Print a message that displays the cards in, and the value of the hand.
 fn print_hand(hand: &Hand) {
     println!("(down) {}", get_card_name(&hand[0]));
     for card in hand[1..].iter() {
@@ -42,6 +54,7 @@ fn print_hand(hand: &Hand) {
     println!("\nYour hand has a value of {}!", get_hand_value(hand));
 }
 
+/// Create and return a new shuffled Deck.
 fn build_deck(rng: &mut ThreadRng) -> Deck {
     let mut deck = Vec::new();
     for value in CARD_VALUES.iter() {
@@ -53,6 +66,7 @@ fn build_deck(rng: &mut ThreadRng) -> Deck {
     return deck;
 }
 
+/// Return the integer value of the given hand.
 fn get_hand_value(hand: &Hand) -> u32 {
     let mut total = 0;
     for (value, _) in hand {
@@ -61,23 +75,23 @@ fn get_hand_value(hand: &Hand) -> u32 {
         // TODO: Handle the case where if we are busting, Aces can be worth 1 instead.
         if value == 1 { value = 11; }
         total += value;
-
     }
     total
 }
 
+/// Returns the name of the given card.
 fn get_card_name(card: &Card) -> String {
     format!("{} of {}", card.0, card.1)
 }
 
 fn main() {
     let mut rng = rand::thread_rng();
-    let mut deck = Vec::new();
-    let mut chips = 10;
     let mut input_buffer = String::new();
     let mut phase = GamePhase::OutOfGame;
-    let mut hand = Vec::new();
+    let mut chips = 10;
     let mut bet = 0;
+    let mut deck = Vec::new();
+    let mut hand = Vec::new();
 
     loop {
         if phase == GamePhase::OutOfGame && chips == 0 {
@@ -129,11 +143,11 @@ fn main() {
                             continue;
                         }
 
-                        bet = wager;
-                        chips -= wager;
-                        phase = GamePhase::InGame;
                         deck = build_deck(&mut rng);
                         hand.clear();
+                        phase = GamePhase::InGame;
+                        bet = wager;
+                        chips -= wager;
 
                         // TODO: Handle blackjack off the draw.
                         let down = deck.pop().unwrap();
