@@ -6,6 +6,7 @@ use std::cmp::Ordering;
 /// The hand value at which the player is awarded a Blackjack.
 const BLACKJACK: u32 = 21;
 
+// TODO: Call these CARD_NAMES and change code to refer to this data as "Card Name"
 /// All possible card values.
 const CARD_VALUES: [&str; 13] = ["Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"];
 
@@ -26,9 +27,21 @@ const HELP_MENU_HEADER: [&str; 4] = [
 /// The command line prompt used to indicate the user that the game is waiting for input.
 const PROMPT: &str = ">>>";
 
+/// The number of chips the player starts with.
+const START_CHIPS: u32 = 10;
+
 type Card = (String, String);
 type Hand = Vec<Card>;
 type Deck = Hand;
+
+struct GameState {
+    bet: u32,
+    chips: u32,
+    deck: Deck,
+    hand: Hand,
+    phase: GamePhase,
+    rng: ThreadRng,
+}
 
 #[derive(PartialEq)]
 enum GamePhase {
@@ -88,17 +101,61 @@ fn get_card_name(card: &Card) -> String {
     format!("{} of {}", card.0, card.1)
 }
 
-fn main() {
-    let mut rng = rand::thread_rng();
-    let mut input_buffer = String::new();
-    let mut phase = GamePhase::OutOfGame;
-    let mut chips = 10;
-    let mut bet = 0;
-    let mut deck = Vec::new();
-    let mut hand = Vec::new();
+/// Tries to start a new hand, optionally with the given cards.
+fn try_start_hand(state: &mut GameState, wager: u32, start_hand: Option<Hand>) {
+    state.deck = build_deck(&mut state.rng);
+    state.hand.clear();
+    state.phase = GamePhase::InGame;
+    state.bet = wager;
+    state.chips -= wager;
 
+    match start_hand {
+        // TODO: Remove cards from the newly build deck?
+        Some(hand) => { state.hand = hand; },
+        None => {
+            let down = state.deck.pop().unwrap();
+            let up = state.deck.pop().unwrap();
+            state.hand.push(down.clone());
+            state.hand.push(up.clone());
+        },
+    };
+
+    // TODO: Handle blackjack off the draw.
+    println!("You have been dealt the following cards:");
+    print_hand(&state.hand);
+    println!("\nTo view available commands, type \"help\".");
+}
+
+#[allow(dead_code)]
+/// Parses a command line identifier of a card.
+/// form: Ace_Hearts (note: currently case sensitive)
+fn parse_card_id(id: &String) -> Result<Card, String> {
+    let tokens = id.split('_').collect::<Vec<&str>>();
+    if tokens.len() != 2 {
+        return Err(format!("{} is not in the correct form Card_Suit!", id.clone()));
+    }
+
+    let name_index = CARD_VALUES.iter().position(|v| v.eq(&tokens[0]));
+    let suit_index = CARD_SUITS.iter().position(|s| s.eq(&tokens[1]));
+
+    if name_index.is_none() { return Err(format!("{} is not a valid value for card name!", tokens[0])); }
+    if suit_index.is_none() { return Err(format!("{} is not a valid value for card suit!", tokens[1])); }
+
+    Ok((String::from(tokens[0]), String::from(tokens[1])))
+}
+
+fn main() {
+    let mut input_buffer = String::new();
+    let mut state = GameState {
+        bet: 0,
+        chips: START_CHIPS,
+        deck: Vec::new(),
+        hand: Vec::new(),
+        phase: GamePhase::OutOfGame,
+        rng: rand::thread_rng(),
+    };
     loop {
-        if phase == GamePhase::OutOfGame && chips == 0 {
+        if state.phase == GamePhase::OutOfGame && state.chips == 0 {
             print_lines(vec![
                 "",
                 "---------------------------------------------------",
@@ -114,10 +171,33 @@ fn main() {
         io::stdin().read_line(&mut input_buffer).expect("Failed to read input!");
         let tokens = input_buffer.trim().split(' ').collect::<Vec<&str>>();
 
-        match phase {
+        match state.phase {
             GamePhase::OutOfGame => {
+                #[cfg(feature="debug")]
+                if tokens[0] == "debug-start" {
+                    if tokens.len() != 3 {
+                        println!("Usage: debug-start <card 1> <card 2>");
+                        continue;
+                    }
+                    let card1 = parse_card_id(&String::from(tokens[1]));
+                    let card2 = parse_card_id(&String::from(tokens[2]));
+
+                    if card1.is_err() {
+                        println!("Error: {}", card1.unwrap_err());
+                        continue;
+                    }
+                    if card2.is_err() {
+                        println!("Error: {}", card2.unwrap_err());
+                        continue;
+                    }
+
+                    // These are safe unwraps because we have already checked the errors above.
+                    try_start_hand(&mut state, 0, Some(vec![card1.unwrap(), card2.unwrap()]));
+                    continue;
+                }
+
                 match tokens[0] {
-                    "chips" => { println!("{}", chips); },
+                    "chips" => { println!("{}", state.chips); },
                     "exit" => { process::exit(0); },
                     "help" => {
                         print_help_menu(vec![
@@ -142,26 +222,12 @@ fn main() {
                             println!("You must wager at least 1 chip!");
                             continue;
                         }
-                        if wager > chips {
-                            println!("You cannot wager {} chips because you only have {}!", wager, chips);
+                        if wager > state.chips {
+                            println!("You cannot wager {} chips because you only have {}!", wager, state.chips);
                             continue;
                         }
 
-                        deck = build_deck(&mut rng);
-                        hand.clear();
-                        phase = GamePhase::InGame;
-                        bet = wager;
-                        chips -= wager;
-
-                        // TODO: Handle blackjack off the draw.
-                        let down = deck.pop().unwrap();
-                        let up = deck.pop().unwrap();
-                        hand.push(down.clone());
-                        hand.push(up.clone());
-
-                        println!("You have been dealt the following cards:");
-                        print_hand(&hand);
-                        println!("\nTo view available commands, type \"help\".");
+                        try_start_hand(&mut state, wager, None);
                     },
                     _ => println!("Invalid command!"),
                 };
@@ -169,7 +235,7 @@ fn main() {
             GamePhase::InGame => {
                 match tokens[0] {
                     "exit" => { process::exit(0); },
-                    "hand" => { print_hand(&hand); },
+                    "hand" => { print_hand(&state.hand); },
                     "help" => {
                         print_help_menu(vec![
                             "exit: End the game.",
@@ -180,54 +246,54 @@ fn main() {
                         ]);
                     },
                     "hit" => {
-                        let card = deck.pop().unwrap();
-                        hand.push(card.clone());
+                        let card = state.deck.pop().unwrap();
+                        state.hand.push(card.clone());
                         println!("You have been dealt the {}!\n", get_card_name(&card));
-                        print_hand(&hand);
+                        print_hand(&state.hand);
 
-                        let hand_value = get_hand_value(&hand);
+                        let hand_value = get_hand_value(&state.hand);
                         if hand_value > BLACKJACK {
                             println!("\nYOU BUSTED!!!");
-                            phase = GamePhase::OutOfGame;
+                            state.phase = GamePhase::OutOfGame;
                         } else if hand_value == BLACKJACK {
                             println!("\nBLACKJACK!");
-                            chips += bet;
-                            phase = GamePhase::OutOfGame;
+                            state.chips += state.bet;
+                            state.phase = GamePhase::OutOfGame;
                         }
                     },
                     "leave" => {
-                        phase = GamePhase::OutOfGame;
+                        state.phase = GamePhase::OutOfGame;
                         println!("You have quit your hand!");
                     },
                     "stay" => {
                         let mut dealer_hand = Vec::new();
-                        dealer_hand.push(deck.pop().unwrap());
-                        dealer_hand.push(deck.pop().unwrap());
+                        dealer_hand.push(state.deck.pop().unwrap());
+                        dealer_hand.push(state.deck.pop().unwrap());
 
                         // TODO: Will dealer try to beat the player's hand?
                         while get_hand_value(&dealer_hand) < DEALER_LIMIT {
-                            dealer_hand.push(deck.pop().unwrap());
+                            dealer_hand.push(state.deck.pop().unwrap());
                         }
 
                         // TODO: Make helper function for surrounding with dashes.
                         print_lines(vec!["---------", "Your Hand", "---------"]);
-                        print_hand(&hand);
+                        print_hand(&state.hand);
                         print_lines(vec!["-------------", "Dealer's Hand", "-------------"]);
                         print_hand(&dealer_hand);
                         println!();
 
                         if get_hand_value(&dealer_hand) > BLACKJACK {
                             println!("DEALER BUSTED. YOU WIN!!!");
-                            chips += bet * 2;
+                            state.chips += state.bet * 2;
                         } else {
-                            match get_hand_value(&dealer_hand).cmp(&get_hand_value(&hand)) {
+                            match get_hand_value(&dealer_hand).cmp(&get_hand_value(&state.hand)) {
                                 Ordering::Less => {
                                     println!("YOU WIN!!!");
-                                    chips += bet * 2;
+                                    state.chips += state.bet * 2;
                                 },
                                 Ordering::Equal => {
                                     println!("DRAW!!!");
-                                    chips += bet;
+                                    state.chips += state.bet;
                                 },
                                 Ordering::Greater => {
                                     println!("YOU LOSE!!!");
@@ -235,7 +301,7 @@ fn main() {
                             }
                         }
 
-                        phase = GamePhase::OutOfGame;
+                        state.phase = GamePhase::OutOfGame;
                     },
                     _ => println!("Invalid command!"),
                 }
