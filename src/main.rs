@@ -110,8 +110,13 @@ fn get_card_name(card: &Card) -> String {
 fn try_start_hand(state: &mut GameState, wager: u32, start_hand: Option<Hand>) {
     state.deck = build_deck(&mut state.rng);
     match start_hand {
-        // TODO: Remove cards from the newly build deck?
-        Some(hand) => { state.hand = hand; },
+        Some(hand) => {
+            // Since start_hand is (currently) only ever built using parse_card_id(), we know that it will only
+            // contain valid Cards (ones that appear in the deck), so we can safely unwrap these indices.
+            state.deck.remove(state.deck.iter().position(|c| c.eq(&hand[0])).unwrap());
+            state.deck.remove(state.deck.iter().position(|c| c.eq(&hand[1])).unwrap());
+            state.hand = hand;
+        },
         None => {
             state.hand.clear();
             let down = state.deck.pop().unwrap();
