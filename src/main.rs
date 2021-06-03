@@ -6,9 +6,8 @@ use std::cmp::Ordering;
 /// The hand value at which the player is awarded a Blackjack.
 const BLACKJACK: u32 = 21;
 
-// TODO: Call these CARD_NAMES and change code to refer to this data as "Card Name"
-/// All possible card values.
-const CARD_VALUES: [&str; 13] = ["Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"];
+/// All possible card names.
+const CARD_NAMES: [&str; 13] = ["Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"];
 
 /// All possible card suits.
 const CARD_SUITS: [&str; 4] = ["Hearts", "Diamonds", "Clubs", "Spades"];
@@ -74,9 +73,9 @@ fn print_hand(hand: &Hand) {
 /// Create and return a new shuffled Deck.
 fn build_deck(rng: &mut ThreadRng) -> Deck {
     let mut deck = Vec::new();
-    for value in CARD_VALUES.iter() {
+    for name in CARD_NAMES.iter() {
         for suit in CARD_SUITS.iter() {
-            deck.push((String::from(*value), String::from(*suit)));
+            deck.push((String::from(*name), String::from(*suit)));
         }
     }
     deck.shuffle(rng);
@@ -87,8 +86,8 @@ fn build_deck(rng: &mut ThreadRng) -> Deck {
 fn get_hand_value(hand: &Hand) -> u32 {
     let mut total = 0;
     let mut aces = 0;
-    for (value, _) in hand {
-        let mut value = (CARD_VALUES.iter().position(|v| v.eq(value)).unwrap() as u32) + 1;
+    for (name, _) in hand {
+        let mut value = (CARD_NAMES.iter().position(|n| n.eq(name)).unwrap() as u32) + 1;
         if value == 1 { value += 10; aces += 1; }
         else if value > 10 { value = 10; }
         total += value;
@@ -146,7 +145,7 @@ fn parse_card_id(id: &String) -> Result<Card, String> {
         return Err(format!("{} is not in the correct form Card_Suit!", id.clone()));
     }
 
-    let name_index = CARD_VALUES.iter().position(|v| v.eq(&tokens[0]));
+    let name_index = CARD_NAMES.iter().position(|v| v.eq(&tokens[0]));
     let suit_index = CARD_SUITS.iter().position(|s| s.eq(&tokens[1]));
 
     if name_index.is_none() { return Err(format!("{} is not a valid value for card name!", tokens[0])); }
