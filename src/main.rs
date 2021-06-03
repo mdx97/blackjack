@@ -89,8 +89,7 @@ fn get_hand_value(hand: &Hand) -> u32 {
     for (value, _) in hand {
         let mut value = (CARD_VALUES.iter().position(|v| v.eq(value)).unwrap() as u32) + 1;
         if value > 10 { value = 10; }
-        // TODO: Handle the case where if we are busting, Aces can be worth 1 instead.
-        if value == 1 { value = 11; }
+        else if value == 1 && total + 11 <= BLACKJACK { value = 11; }
         total += value;
     }
     total
@@ -104,15 +103,11 @@ fn get_card_name(card: &Card) -> String {
 /// Tries to start a new hand, optionally with the given cards.
 fn try_start_hand(state: &mut GameState, wager: u32, start_hand: Option<Hand>) {
     state.deck = build_deck(&mut state.rng);
-    state.hand.clear();
-    state.phase = GamePhase::InGame;
-    state.bet = wager;
-    state.chips -= wager;
-
     match start_hand {
         // TODO: Remove cards from the newly build deck?
         Some(hand) => { state.hand = hand; },
         None => {
+            state.hand.clear();
             let down = state.deck.pop().unwrap();
             let up = state.deck.pop().unwrap();
             state.hand.push(down.clone());
@@ -120,9 +115,18 @@ fn try_start_hand(state: &mut GameState, wager: u32, start_hand: Option<Hand>) {
         },
     };
 
-    // TODO: Handle blackjack off the draw.
     println!("You have been dealt the following cards:");
     print_hand(&state.hand);
+
+    if get_hand_value(&state.hand) == BLACKJACK {
+        println!("\nBLACKJACK!!!");
+        state.chips += wager;
+        return;
+    }
+
+    state.phase = GamePhase::InGame;
+    state.bet = wager;
+    state.chips -= wager;
     println!("\nTo view available commands, type \"help\".");
 }
 
