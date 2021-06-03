@@ -86,12 +86,19 @@ fn build_deck(rng: &mut ThreadRng) -> Deck {
 /// Return the integer value of the given hand.
 fn get_hand_value(hand: &Hand) -> u32 {
     let mut total = 0;
+    let mut aces = 0;
     for (value, _) in hand {
         let mut value = (CARD_VALUES.iter().position(|v| v.eq(value)).unwrap() as u32) + 1;
-        if value > 10 { value = 10; }
-        else if value == 1 && total + 11 <= BLACKJACK { value = 11; }
+        if value == 1 { value += 10; aces += 1; }
+        else if value > 10 { value = 10; }
         total += value;
     }
+
+    while total > BLACKJACK && aces > 0 {
+        total -= 10;
+        aces -= 1;
+    }
+
     total
 }
 
@@ -146,6 +153,23 @@ fn parse_card_id(id: &String) -> Result<Card, String> {
     if suit_index.is_none() { return Err(format!("{} is not a valid value for card suit!", tokens[1])); }
 
     Ok((String::from(tokens[0]), String::from(tokens[1])))
+}
+
+/// Adds the given card to the players hand.
+fn hit_me(state: &mut GameState, card: &Card) {
+    state.hand.push(card.clone());
+    println!("You have been dealt the {}!\n", get_card_name(card));
+    print_hand(&state.hand);
+
+    let hand_value = get_hand_value(&state.hand);
+    if hand_value > BLACKJACK {
+        println!("\nYOU BUSTED!!!");
+        state.phase = GamePhase::OutOfGame;
+    } else if hand_value == BLACKJACK {
+        println!("\nBLACKJACK!");
+        state.chips += state.bet;
+        state.phase = GamePhase::OutOfGame;
+    }
 }
 
 fn main() {
@@ -237,6 +261,19 @@ fn main() {
                 };
             },
             GamePhase::InGame => {
+                #[cfg(feature="debug")]
+                if tokens[0] == "debug-hit" {
+                    if tokens.len() != 2 {
+                        println!("Usage: debug-hit <card>");
+                        continue;
+                    }
+                    match parse_card_id(&String::from(tokens[1])) {
+                        Ok(card) => { hit_me(&mut state, &card); },
+                        Err(error) => { println!("Error: {}", error); },
+                    };
+                    continue;
+                }
+
                 match tokens[0] {
                     "exit" => { process::exit(0); },
                     "hand" => { print_hand(&state.hand); },
@@ -251,19 +288,7 @@ fn main() {
                     },
                     "hit" => {
                         let card = state.deck.pop().unwrap();
-                        state.hand.push(card.clone());
-                        println!("You have been dealt the {}!\n", get_card_name(&card));
-                        print_hand(&state.hand);
-
-                        let hand_value = get_hand_value(&state.hand);
-                        if hand_value > BLACKJACK {
-                            println!("\nYOU BUSTED!!!");
-                            state.phase = GamePhase::OutOfGame;
-                        } else if hand_value == BLACKJACK {
-                            println!("\nBLACKJACK!");
-                            state.chips += state.bet;
-                            state.phase = GamePhase::OutOfGame;
-                        }
+                        hit_me(&mut state, &card);
                     },
                     "leave" => {
                         state.phase = GamePhase::OutOfGame;
